@@ -1,0 +1,120 @@
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
+from app.auth import verify_firebase_token
+from app.database import db_manager
+
+app = FastAPI(
+    title="Gold Frame Generator API",
+    description="ระบบเบื้องหลังการเลี่ยมกรอบทองคำแท้ (ปลอม) สตรีท กวนประสาท",
+    version="1.0.0"
+)
+
+# CORS configuration to allow local development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.get("/api/config")
+async def get_client_config():
+    """
+    Expose Firebase client configuration from environment variables.
+    Falls back to mock mode if credentials are not set.
+    """
+    import os
+    api_key = os.environ.get("FIREBASE_API_KEY")
+    auth_domain = os.environ.get("FIREBASE_AUTH_DOMAIN")
+    project_id = os.environ.get("FIREBASE_PROJECT_ID")
+    app_id = os.environ.get("FIREBASE_APP_ID")
+    
+    if api_key and auth_domain and project_id:
+        return {
+            "isMock": False,
+            "config": {
+                "apiKey": api_key,
+                "authDomain": auth_domain,
+                "projectId": project_id,
+                "appId": app_id
+            }
+        }
+    return {
+        "isMock": True,
+        "message": "รันในโหมดจำลอง (Mock Mode) เนื่องจากไม่ได้ตั้งค่า Firebase Env Vars"
+    }
+
+@app.get("/api/auth/check")
+async def check_auth(decoded_token: dict = Depends(verify_firebase_token)):
+    """
+    Check if the authenticated user's email is whitelisted.
+    Returns the callsign if approved, otherwise raises 403 Forbidden.
+    """
+    email = decoded_token.get("email")
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="ไม่พบ Email ในข้อมูลความรวยของคุณ"
+        )
+    
+    callsign = db_manager.get_callsign(email)
+    if not callsign:
+        # Sarcastic, playful Thai responses for non-whitelisted users
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="ขออภัย สัญญาณเรียกขานของคุณยังไม่ได้รับการอนุมัติ... บารมียังไม่ถึงขั้น โปรดติดต่อเสี่ยเพื่อขอสิทธิ์เลี่ยมทอง"
+        )
+    
+    return {
+        "status": "success",
+        "email": email,
+        "callsign": callsign
+    }
+
+@app.post("/api/logs/generate")
+async def log_generation(decoded_token: dict = Depends(verify_firebase_token)):
+    """
+    Log a meme generation event under the user's callsign.
+    """
+    email = decoded_token.get("email")
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="ไม่พบ Email ในข้อมูล"
+        )
+        
+    callsign = db_manager.get_callsign(email)
+    if not callsign:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="QRU 73! สัญญาณของคุณถูกรบกวนโดยความจน กรุณากลับไปสะสมแต้มบุญกับท่านเจ้าคุณใหม่"
+        )
+        
+    db_manager.log_generation(callsign)
+    return {
+        "status": "success",
+        "message": f"เลี่ยมทองสำเร็จเรียบร้อยสำหรับสัญญาณเรียกขาน {callsign}!"
+    }
+
+@app.get("/api/stats")
+async def get_stats():
+    """
+    Fetch all aggregated leaderboard stats (Hall of Frame).
+    Publicly accessible.
+    """
+    try:
+        stats = db_manager.get_stats()
+        return stats
+    except Exception as e:
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"detail": f"เกิดข้อผิดพลาดทางเทคนิค (ความรวยขัดข้อง): {str(e)}"}
+        )
+
+# Mount static files at the root
+# Note: FastAPI matches routes in order of declaration, so /api/... will be resolved first.
+# Any other routes will fall through to the static files directory.
+app.mount("/", StaticFiles(directory="app/static", html=True), name="static")
