@@ -1,0 +1,50 @@
+# Powershell Deploy Script for Gold Frame Meme Generator (Template)
+# Stop execution if any command fails
+$ErrorActionPreference = "Stop"
+
+# Helper function to check last command exit code
+function Check-LastExitCode {
+    param (
+        [string]$ErrorMessage
+    )
+    if ($LastExitCode -ne 0) {
+        Write-Host "[ERROR] $ErrorMessage" -ForegroundColor Red
+        exit $LastExitCode
+    }
+}
+
+# --- Variables Configuration (Adjust to your project settings) ---
+$PROJECT_ID = "YOUR_GCP_PROJECT_ID"
+$REGION = "asia-southeast1"
+$SERVICE_NAME = "gold-frame-generator"
+$IMAGE_TAG = "gcr.io/$PROJECT_ID/${SERVICE_NAME}:latest"
+
+Write-Host "[START] Starting deployment to Cloud Run..." -ForegroundColor Cyan
+
+# 1. Set gcloud active project
+Write-Host "[SETUP] Setting active gcloud project..."
+gcloud config set project $PROJECT_ID
+Check-LastExitCode "gcloud config set project failed."
+
+# 2. Build Docker Image and Push to Google Container Registry
+Write-Host "[BUILD] Building and pushing container image..." -ForegroundColor Yellow
+gcloud builds submit --tag $IMAGE_TAG .
+Check-LastExitCode "Cloud Build execution failed. Stopping deployment."
+
+# 3. Deploy to Cloud Run (Scale to Zero enabled)
+Write-Host "[DEPLOY] Deploying service to Cloud Run..." -ForegroundColor Green
+gcloud run deploy $SERVICE_NAME `
+    --image $IMAGE_TAG `
+    --platform managed `
+    --region $REGION `
+    --allow-unauthenticated `
+    --min-instances 0 `
+    --max-instances 2 `
+    --memory 256Mi `
+    --cpu 1
+    # To enable real Firebase Authentication (disabling Mock Mode), append a backtick to the line above
+    # and uncomment the line below with your actual Firebase web client credentials:
+    # --set-env-vars "FIREBASE_API_KEY=YOUR_API_KEY,FIREBASE_AUTH_DOMAIN=YOUR_AUTH_DOMAIN,FIREBASE_PROJECT_ID=YOUR_PROJECT_ID,FIREBASE_APP_ID=YOUR_APP_ID"
+Check-LastExitCode "Cloud Run deployment failed."
+
+Write-Host "[SUCCESS] Done! Your Gold Frame Meme app is ready. Check the URL above!" -ForegroundColor Green

@@ -1,25 +1,25 @@
 #!/bin/bash
 
-# สั่งให้สคริปต์หยุดทำงานทันทีถ้ามีบรรทัดไหน Error
+# Stop execution if any command fails
 set -e
 
-# --- ตั้งค่าตัวแปร (ปรับเปลี่ยนตามโปรเจกต์ของคุณ) ---
-PROJECT_ID="gold-frame-meme"
+# --- Variables Configuration (Adjust to your project settings) ---
+PROJECT_ID="gold-frame-generator"
 REGION="asia-southeast1"
 SERVICE_NAME="gold-frame-generator"
 IMAGE_TAG="gcr.io/$PROJECT_ID/$SERVICE_NAME:latest"
 
-echo "🌟 เริ่มต้นกระบวนการเลี่ยมทองบน Cloud Run..."
+echo "🌟 Starting deployment to Cloud Run..."
 
-# 1. ยืนยันโปรเจกต์บน gcloud
+# 1. Set gcloud active project
 gcloud config set project $PROJECT_ID
 
-# 2. Build Docker Image และ Push ขึ้น Google Container Registry
-echo "📦 กำลังแพ็คแอปพลิเคชันลง Container..."
+# 2. Build Docker Image and Push to Google Container Registry
+echo "📦 Building and pushing container image..."
 gcloud builds submit --tag $IMAGE_TAG .
 
-# 3. Deploy ขึ้น Cloud Run (เปิดโหมดประหยัดสุด Scale to Zero)
-echo "🚀 กำลังส่งแอปขึ้นยาน Cloud Run..."
+# 3. Deploy to Cloud Run (Scale to Zero enabled)
+echo "🚀 Deploying service to Cloud Run..."
 gcloud run deploy $SERVICE_NAME \
     --image $IMAGE_TAG \
     --platform managed \
@@ -30,4 +30,5 @@ gcloud run deploy $SERVICE_NAME \
     --memory 256Mi \
     --cpu 1
 
-echo "✨ เสร็จสิ้น! แอปกรอบหลุยส์สุดมีมพร้อมใช้งานแล้วที่ URL ด้านบน!"
+echo "✨ Done! Your Gold Frame Meme app is ready. Check the URL above!"
+

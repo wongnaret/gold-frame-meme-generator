@@ -1,12 +1,17 @@
 import os
-from datetime import datetime, timedelta
+import json
+from datetime import datetime, timedelta, timezone
 from collections import Counter
 from google.cloud import datastore
 
-# Check if we should use mock database (no credentials and not in GCP environment)
-# If local dev doesn't have credentials, we use mock db so it works instantly.
-IS_GCP = os.environ.get("K_SERVICE") is not None or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") is not None
-USE_MOCK_DB = not IS_GCP
+# Try to detect if we're running in GCP or have valid credentials (including ADC from gcloud)
+# Priority: K_SERVICE (Cloud Run) > GOOGLE_APPLICATION_CREDENTIALS > ADC (gcloud auth application-default login)
+# If FIREBASE_PROJECT_ID is set, we assume the user wants to use real GCP and will try to connect.
+_firebase_configured = os.environ.get("FIREBASE_PROJECT_ID") is not None and os.environ.get("FIREBASE_API_KEY") is not None
+_force_mock = os.environ.get("USE_MOCK_DB", "").lower() in ("1", "true", "yes")
+USE_MOCK_DB = _force_mock or not _firebase_configured
+
+
 
 # Pre-populated mock data for testing/fallback
 mock_whitelist = {
@@ -16,15 +21,31 @@ mock_whitelist = {
     "visitor@gmail.com": "เจ๊หวังเลี่ยมทอง"
 }
 
+# Load whitelist.json only when running in Mock Mode (no real Datastore connection)
+if USE_MOCK_DB:
+    whitelist_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "whitelist.json")
+    if os.path.exists(whitelist_path):
+        try:
+            with open(whitelist_path, "r", encoding="utf-8") as f:
+                custom_whitelist = json.load(f)
+                if isinstance(custom_whitelist, dict):
+                    mock_whitelist.update({k.lower(): v for k, v in custom_whitelist.items()})
+                    print(f"[INFO] Mock Mode: Loaded whitelist from {whitelist_path}")
+        except Exception as e:
+            print(f"[WARNING] Failed to load whitelist.json: {e}")
+
+
+
 # In-memory logs mock
+_now = datetime.now(timezone.utc)
 mock_logs = [
     # Seed some mock logs for analytics preview
-    {"callsign": "เสี่ยดม", "timestamp": datetime.utcnow() - timedelta(hours=2)},
-    {"callsign": "เสี่ยดม", "timestamp": datetime.utcnow() - timedelta(days=2)},
-    {"callsign": "เจ๊หวังเลี่ยมทอง", "timestamp": datetime.utcnow() - timedelta(hours=5)},
-    {"callsign": "เจ๊หวังเลี่ยมทอง", "timestamp": datetime.utcnow() - timedelta(days=8)},
-    {"callsign": "ผู้กองยอดรัก", "timestamp": datetime.utcnow() - timedelta(days=15)},
-    {"callsign": "เสี่ยสั่งเลี่ยม", "timestamp": datetime.utcnow() - timedelta(days=20)},
+    {"callsign": "เสี่ยดม", "timestamp": _now - timedelta(hours=2)},
+    {"callsign": "เสี่ยดม", "timestamp": _now - timedelta(days=2)},
+    {"callsign": "เจ๊หวังเลี่ยมทอง", "timestamp": _now - timedelta(hours=5)},
+    {"callsign": "เจ๊หวังเลี่ยมทอง", "timestamp": _now - timedelta(days=8)},
+    {"callsign": "ผู้กองยอดรัก", "timestamp": _now - timedelta(days=15)},
+    {"callsign": "เสี่ยสั่งเลี่ยม", "timestamp": _now - timedelta(days=20)},
 ]
 
 class DatastoreManager:
@@ -64,7 +85,7 @@ class DatastoreManager:
                 entity = datastore.Entity(key=key)
                 entity.update({
                     'callsign': callsign,
-                    'timestamp': datetime.utcnow()
+                    'timestamp': datetime.now(timezone.utc)
                 })
                 self.client.put(entity)
                 return
@@ -74,7 +95,7 @@ class DatastoreManager:
         # Fallback/Mock
         mock_logs.append({
             'callsign': callsign,
-            'timestamp': datetime.utcnow()
+            'timestamp': datetime.now(timezone.utc)
         })
 
     def get_stats(self):
@@ -85,7 +106,7 @@ class DatastoreManager:
         - 30 Days
         - All Time (Capped at last 5000 logs to prevent memory overflow)
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         start_today = now.replace(hour=0, minute=0, second=0, microsecond=0)
         start_7d = now - timedelta(days=7)
         start_30d = now - timedelta(days=30)

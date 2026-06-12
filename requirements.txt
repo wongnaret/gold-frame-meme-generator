@@ -3,3 +3,5 @@ uvicorn[standard]>=0.30.0
 firebase-admin>=6.5.0
 google-cloud-datastore>=2.19.0
 python-multipart>=0.0.9
+python-dotenv>=1.0.0
+

@@ -65,7 +65,7 @@ async def check_auth(decoded_token: dict = Depends(verify_firebase_token)):
         # Sarcastic, playful Thai responses for non-whitelisted users
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="ขออภัย สัญญาณเรียกขานของคุณยังไม่ได้รับการอนุมัติ... บารมียังไม่ถึงขั้น โปรดติดต่อเสี่ยเพื่อขอสิทธิ์เลี่ยมทอง"
+            detail="ขออภัย สัญญาณเรียกขานของคุณยังไม่ได้รับการอนุมัติ... บารมียังไม่ถึงขั้น โปรดติดต่อแอดมินเพื่อขอสิทธิ์เลี่ยมทอง"
         )
     
     return {
@@ -114,7 +114,33 @@ async def get_stats():
             content={"detail": f"เกิดข้อผิดพลาดทางเทคนิค (ความรวยขัดข้อง): {str(e)}"}
         )
 
+# API to list available frame templates
+@app.get("/api/templates")
+async def list_templates():
+    """
+    List all available template image filenames in the frame_template directory.
+    """
+    import os
+    template_dir = "frame_template"
+    if not os.path.exists(template_dir):
+        return []
+    
+    valid_extensions = {".png", ".jpg", ".jpeg", ".webp"}
+    templates = []
+    try:
+        for file in os.listdir(template_dir):
+            if os.path.splitext(file)[1].lower() in valid_extensions:
+                templates.append(file)
+    except Exception as e:
+        print(f"Error listing templates: {e}")
+        
+    return sorted(templates)
+
+# Mount static files for frame templates first
+app.mount("/frame_template", StaticFiles(directory="frame_template"), name="frame_templates")
+
 # Mount static files at the root
 # Note: FastAPI matches routes in order of declaration, so /api/... will be resolved first.
 # Any other routes will fall through to the static files directory.
 app.mount("/", StaticFiles(directory="app/static", html=True), name="static")
+

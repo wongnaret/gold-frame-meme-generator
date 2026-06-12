@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+whitelist.json
+
+# Local deploy scripts containing custom configuration
+deploy.ps1

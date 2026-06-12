@@ -1,8 +1,14 @@
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
 import firebase_admin
 from firebase_admin import auth
 from fastapi import HTTPException, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
 
 # Initialize Firebase Admin SDK
 try:
@@ -17,8 +23,10 @@ except ValueError:
         firebase_admin.initialize_app()
 
 # Check if we should use mock database/auth (no credentials and not in GCP environment)
-IS_GCP = os.environ.get("K_SERVICE") is not None or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") is not None
-USE_MOCK_DB = not IS_GCP
+_firebase_configured = os.environ.get("FIREBASE_PROJECT_ID") is not None and os.environ.get("FIREBASE_API_KEY") is not None
+_force_mock = os.environ.get("USE_MOCK_DB", "").lower() in ("1", "true", "yes")
+USE_MOCK_DB = _force_mock or not _firebase_configured
+
 
 security = HTTPBearer()
 

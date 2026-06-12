@@ -17,8 +17,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application source code
+# Copy application source code and resources
 COPY ./app ./app
+COPY ./frame_template ./frame_template
+COPY ./whitelist.json* ./
+
 
 # Expose port (Cloud Run defaults to 8080, but can vary)
 EXPOSE 8080
