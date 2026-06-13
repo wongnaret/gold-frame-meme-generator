@@ -17,6 +17,7 @@ let userImage = null;
 let goldFrameImage = new Image();
 let processedFrameCanvas = null; // Offscreen canvas for processed transparent frame (portrait)
 let activeFrameCanvas = null;    // Frame canvas actually used for rendering (may be rotated)
+let frameRotation = 0;           // 0 = 0 deg, 1 = 90 deg, 2 = 180 deg, 3 = 270 deg
 
 // DOM Elements
 const authAlert = document.getElementById('auth-alert');
@@ -42,6 +43,7 @@ const ctx = canvas.getContext('2d');
 const canvasLoading = document.getElementById('canvas-loading');
 const templateSelectorContainer = document.getElementById('template-selector-container');
 const attributionList = document.getElementById('attribution-list');
+const btnRotateFrame = document.getElementById('btn-rotate-frame');
 
 
 
@@ -65,6 +67,15 @@ const leaderboardList = document.getElementById('leaderboard-list');
 const leaderboardLoading = document.getElementById('leaderboard-loading');
 const leaderboardEmpty = document.getElementById('leaderboard-empty');
 
+function updateActiveFrameCanvas() {
+  if (!processedFrameCanvas) return;
+  let current = processedFrameCanvas;
+  for (let i = 0; i < frameRotation % 4; i++) {
+    current = rotateCanvas90(current);
+  }
+  activeFrameCanvas = current;
+}
+
 // Initialize App
 window.addEventListener('DOMContentLoaded', async () => {
   // Fetch configurations and templates first
@@ -83,9 +94,9 @@ window.addEventListener('DOMContentLoaded', async () => {
       // apply the same auto-rotate / auto-fit logic as handleFile
       const imgW = userImage.naturalWidth || userImage.width;
       const imgH = userImage.naturalHeight || userImage.height;
-      activeFrameCanvas = (imgW > imgH && processedFrameCanvas)
-        ? rotateCanvas90(processedFrameCanvas)
-        : processedFrameCanvas;
+      
+      frameRotation = (imgW > imgH) ? 1 : 0;
+      updateActiveFrameCanvas();
 
       const autoScale = computeAutoFitScale(userImage);
       sliderScale.value = Math.round(autoScale);
@@ -95,7 +106,8 @@ window.addEventListener('DOMContentLoaded', async () => {
       labelX.textContent = '0 px';
       labelY.textContent = '0 px';
     } else {
-      activeFrameCanvas = processedFrameCanvas; // no photo yet — use portrait frame as-is
+      frameRotation = 0;
+      updateActiveFrameCanvas();
     }
 
     drawCanvas();
@@ -398,6 +410,26 @@ function setupEventListeners() {
   });
 
   // Action Buttons
+  if (btnRotateFrame) {
+    btnRotateFrame.addEventListener('click', () => {
+      frameRotation = (frameRotation + 1) % 4;
+      updateActiveFrameCanvas();
+
+      if (userImage) {
+        // Re-fit the scale because the frame orientation has changed
+        const autoScale = computeAutoFitScale(userImage);
+        sliderScale.value = Math.round(autoScale);
+        labelScale.textContent = `${Math.round(autoScale)}%`;
+        sliderX.value = 0;
+        sliderY.value = 0;
+        labelX.textContent = '0 px';
+        labelY.textContent = '0 px';
+      }
+
+      drawCanvas();
+    });
+  }
+
   btnReset.addEventListener('click', () => {
     sliderScale.value = 100;
     sliderX.value = 0;
@@ -563,9 +595,9 @@ function handleFile(file) {
       userImage = rawImg;
       const imgW = rawImg.naturalWidth || rawImg.width;
       const imgH = rawImg.naturalHeight || rawImg.height;
-      activeFrameCanvas = (imgW > imgH && processedFrameCanvas)
-        ? rotateCanvas90(processedFrameCanvas)
-        : processedFrameCanvas;
+      
+      frameRotation = (imgW > imgH) ? 1 : 0;
+      updateActiveFrameCanvas();
 
       // 2. Auto-fit scale with 5% buffer + reset offsets
       const autoScale = computeAutoFitScale(userImage);

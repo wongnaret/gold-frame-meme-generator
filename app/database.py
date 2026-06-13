@@ -112,6 +112,7 @@ class DatastoreManager:
         start_30d = now - timedelta(days=30)
 
         logs = []
+        query_success = False
 
         if self.client:
             try:
@@ -129,10 +130,11 @@ class DatastoreManager:
                             'callsign': entity.get('callsign'),
                             'timestamp': timestamp
                         })
+                query_success = True
             except Exception as e:
                 print(f"Error fetching stats from Datastore: {e}")
         
-        if not self.client or not logs:
+        if not query_success:
             # Fallback to mock logs
             logs = mock_logs
 
