@@ -4,7 +4,7 @@
 set -e
 
 # --- Variables Configuration (Adjust to your project settings) ---
-PROJECT_ID="gold-frame-generator"
+PROJECT_ID="gold-frame-generator-499316"
 REGION="asia-southeast1"
 SERVICE_NAME="gold-frame-generator"
 IMAGE_TAG="gcr.io/$PROJECT_ID/$SERVICE_NAME:latest"
@@ -28,7 +28,8 @@ gcloud run deploy $SERVICE_NAME \
     --min-instances 0 \
     --max-instances 2 \
     --memory 256Mi \
-    --cpu 1
+    --cpu 1 \
+    --set-env-vars "FIREBASE_API_KEY=AIzaSyAfDS8Ww-JP2A6zXs68grH7mj6jW2Vjjsg,FIREBASE_AUTH_DOMAIN=gold-frame-generator-499316.firebaseapp.com,FIREBASE_PROJECT_ID=gold-frame-generator-499316,FIREBASE_APP_ID=1:1093042643837:web:d21f7b22546dfc6702a214"
 
 echo "✨ Done! Your Gold Frame Meme app is ready. Check the URL above!"
 
