@@ -111,28 +111,61 @@ if ($LastExitCode -eq 0 -and ![string]::IsNullOrEmpty($dbInfoRaw)) {
     Write-Host "✅ Datastore Mode database created in $dbLocation." -ForegroundColor Green
 }
 
-# 6. Configure IAM permissions for Cloud Run service account
-Write-Host "`n[IAM] Configuring permissions for Cloud Run service account..." -ForegroundColor Cyan
+# 5.1 Create GCR Compatibility Repository in Artifact Registry (Required for pushing to gcr.io in new projects)
+Write-Host "`n[ARTIFACT REGISTRY] Setting up GCR Compatibility Repository..." -ForegroundColor Cyan
+Write-Host "Checking if 'gcr.io' repository exists in Artifact Registry (us)..." -ForegroundColor Yellow
+
+$repoCheck = gcloud artifacts repositories describe gcr.io --location=us --format="value(name)" 2>$null
+if ($LastExitCode -eq 0 -and ![string]::IsNullOrEmpty($repoCheck)) {
+    Write-Host "✅ GCR Compatibility Repository 'gcr.io' already exists in Artifact Registry (us)." -ForegroundColor Green
+} else {
+    Write-Host "Creating 'gcr.io' repository in Artifact Registry..." -ForegroundColor Yellow
+    gcloud artifacts repositories create gcr.io `
+        --repository-format=docker `
+        --location=us `
+        --description="GCR Compatibility Repository"
+    Check-LastExitCode "Failed to create GCR Compatibility Repository."
+    Write-Host "✅ GCR Compatibility Repository 'gcr.io' created successfully." -ForegroundColor Green
+}
+
+# 6. Configure IAM permissions for default service account (used by Cloud Run and Cloud Build)
+Write-Host "`n[IAM] Configuring permissions for default Compute Engine service account..." -ForegroundColor Cyan
 Write-Host "Retrieving project number..." -ForegroundColor Yellow
 $projectNumber = gcloud projects describe $PROJECT_ID --format="value(projectNumber)"
 Check-LastExitCode "Failed to retrieve project number."
 
 $saEmail = "$($projectNumber.Trim())-compute@developer.gserviceaccount.com"
 Write-Host "Found default Compute Engine service account: $saEmail" -ForegroundColor Yellow
-Write-Host "Binding Cloud Datastore User (roles/datastore.user) role..." -ForegroundColor Yellow
 
-gcloud projects add-iam-policy-binding $PROJECT_ID `
-    --member="serviceAccount:$saEmail" `
-    --role="roles/datastore.user"
+$roles = @(
+    "roles/datastore.user",
+    "roles/storage.admin",
+    "roles/logging.logWriter",
+    "roles/artifactregistry.admin"
+)
 
-if ($LastExitCode -ne 0) {
-    Write-Host "⚠️ Warning: Failed to bind IAM policy." -ForegroundColor Yellow
+$iamSuccess = $true
+foreach ($role in $roles) {
+    Write-Host "Binding $role..." -ForegroundColor Yellow
+    gcloud projects add-iam-policy-binding $PROJECT_ID `
+        --member="serviceAccount:$saEmail" `
+        --role=$role > $null
+    
+    if ($LastExitCode -ne 0) {
+        $iamSuccess = $false
+        Write-Host "⚠️ Failed to bind $role." -ForegroundColor Yellow
+    } else {
+        Write-Host "✅ Bound $role successfully." -ForegroundColor Green
+    }
+}
+
+if (!$iamSuccess) {
+    Write-Host "`n⚠️ Warning: Some IAM policy bindings failed." -ForegroundColor Yellow
     Write-Host "This usually happens if the default Compute Engine service account has not been created yet." -ForegroundColor Yellow
     Write-Host "It will be automatically created when you deploy to Cloud Run for the first time." -ForegroundColor Yellow
-    Write-Host "After your first deployment, please run this command manually:" -ForegroundColor Yellow
-    Write-Host "gcloud projects add-iam-policy-binding $PROJECT_ID --member=`"serviceAccount:$saEmail`" --role=`"roles/datastore.user`"" -ForegroundColor Cyan
+    Write-Host "After your first deployment, please re-run '.\setup_gcp.ps1' to apply all required roles." -ForegroundColor Yellow
 } else {
-    Write-Host "✅ IAM policy binding completed." -ForegroundColor Green
+    Write-Host "`n✅ All service account IAM policy bindings completed successfully." -ForegroundColor Green
 }
 
 # 7. Configure Application Default Credentials (ADC) for local development/scripts

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
@@ -20,35 +20,50 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Custom middleware to disable caching on API endpoints
+@app.middleware("http")
+async def add_no_cache_headers(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/api"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
 @app.get("/api/config")
-async def get_client_config():
+def get_client_config():
     """
     Expose Firebase client configuration from environment variables.
-    Falls back to mock mode if credentials are not set.
+    Falls back to mock mode if credentials are not set or USE_MOCK_DB is True.
     """
     import os
-    api_key = os.environ.get("FIREBASE_API_KEY")
-    auth_domain = os.environ.get("FIREBASE_AUTH_DOMAIN")
-    project_id = os.environ.get("FIREBASE_PROJECT_ID")
-    app_id = os.environ.get("FIREBASE_APP_ID")
+    from app.database import USE_MOCK_DB
     
-    if api_key and auth_domain and project_id:
-        return {
-            "isMock": False,
-            "config": {
-                "apiKey": api_key,
-                "authDomain": auth_domain,
-                "projectId": project_id,
-                "appId": app_id
+    if not USE_MOCK_DB:
+        api_key = os.environ.get("FIREBASE_API_KEY")
+        auth_domain = os.environ.get("FIREBASE_AUTH_DOMAIN")
+        project_id = os.environ.get("FIREBASE_PROJECT_ID")
+        app_id = os.environ.get("FIREBASE_APP_ID")
+        
+        if api_key and auth_domain and project_id:
+            return {
+                "isMock": False,
+                "config": {
+                    "apiKey": api_key,
+                    "authDomain": auth_domain,
+                    "projectId": project_id,
+                    "appId": app_id
+                }
             }
-        }
+            
     return {
         "isMock": True,
-        "message": "รันในโหมดจำลอง (Mock Mode) เนื่องจากไม่ได้ตั้งค่า Firebase Env Vars"
+        "message": "รันในโหมดจำลอง (Mock Mode) เนื่องจากตั้งค่า USE_MOCK_DB เป็น True หรือไม่ได้ตั้งค่า Env Vars"
     }
 
+
 @app.get("/api/auth/check")
-async def check_auth(decoded_token: dict = Depends(verify_firebase_token)):
+def check_auth(decoded_token: dict = Depends(verify_firebase_token)):
     """
     Check if the authenticated user's email is whitelisted.
     Returns the callsign if approved, otherwise raises 403 Forbidden.
@@ -75,7 +90,7 @@ async def check_auth(decoded_token: dict = Depends(verify_firebase_token)):
     }
 
 @app.post("/api/logs/generate")
-async def log_generation(decoded_token: dict = Depends(verify_firebase_token)):
+def log_generation(decoded_token: dict = Depends(verify_firebase_token)):
     """
     Log a meme generation event under the user's callsign.
     """
@@ -100,7 +115,7 @@ async def log_generation(decoded_token: dict = Depends(verify_firebase_token)):
     }
 
 @app.get("/api/stats")
-async def get_stats():
+def get_stats():
     """
     Fetch all aggregated leaderboard stats (Hall of Frame).
     Publicly accessible.
@@ -116,7 +131,7 @@ async def get_stats():
 
 # API to list available frame templates
 @app.get("/api/templates")
-async def list_templates():
+def list_templates():
     """
     List all available template image filenames in the frame_template directory.
     """

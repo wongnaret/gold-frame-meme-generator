@@ -131,7 +131,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 // 1. Config and Auth logic
 async function fetchConfig() {
   try {
-    const res = await fetch('/api/config');
+    const res = await fetch(`/api/config?_=${Date.now()}`);
     const data = await res.json();
 
     if (data.isMock) {
@@ -623,7 +623,7 @@ async function fetchStats(period) {
   leaderboardEmpty.classList.add('hidden');
 
   try {
-    const res = await fetch('/api/stats');
+    const res = await fetch(`/api/stats?_=${Date.now()}`);
     if (!res.ok) throw new Error("API error");
     const data = await res.json();
 
@@ -680,7 +680,7 @@ async function fetchStats(period) {
 // 5. Template selection management
 async function fetchTemplates() {
   try {
-    const res = await fetch('/api/templates');
+    const res = await fetch(`/api/templates?_=${Date.now()}`);
     availableTemplates = await res.json();
     if (availableTemplates && availableTemplates.length > 0) {
       // Default to the first classic template if available

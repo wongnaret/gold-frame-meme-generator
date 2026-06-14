@@ -8,8 +8,15 @@ from google.cloud import datastore
 # Priority: K_SERVICE (Cloud Run) > GOOGLE_APPLICATION_CREDENTIALS > ADC (gcloud auth application-default login)
 # If FIREBASE_PROJECT_ID is set, we assume the user wants to use real GCP and will try to connect.
 _firebase_configured = os.environ.get("FIREBASE_PROJECT_ID") is not None and os.environ.get("FIREBASE_API_KEY") is not None
-_force_mock = os.environ.get("USE_MOCK_DB", "").lower() in ("1", "true", "yes")
-USE_MOCK_DB = _force_mock or not _firebase_configured
+_is_local = os.environ.get("K_SERVICE") is None
+
+# Default to Mock DB on local dev environment unless USE_MOCK_DB is explicitly configured
+_force_mock_val = os.environ.get("USE_MOCK_DB")
+if _force_mock_val is not None:
+    USE_MOCK_DB = _force_mock_val.lower() in ("1", "true", "yes")
+else:
+    USE_MOCK_DB = _is_local or not _firebase_configured
+
 
 
 

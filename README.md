@@ -216,6 +216,17 @@ python scripts/test_datastore.py
    >     --member="serviceAccount:YOUR_PROJECT_NUMBER-compute@developer.gserviceaccount.com" \
    >     --role="roles/datastore.user"
    > ```
+   >
+   > [!WARNING]
+   > **ปัญหาการ Deploy Cloud Run แล้วเจอหน้า Error 403 / Forbidden**:
+   > หากสั่ง deploy แล้วขึ้นคำเตือนเกี่ยวกับ `allUsers` / `FAILED_PRECONDITION` หรือเข้าหน้าเว็บแล้วเจอ `Error: Forbidden`  
+   > สาเหตุเกิดจากโปรเจกต์ติดนโยบายองค์กร (Organization Policy) ที่เรียกว่า **Domain Restricted Sharing** (`iam.allowedPolicyMemberDomains`) ห้ามตั้งค่าสิทธิ์บริการเป็นสาธารณะ  
+   > **แนวทางการแก้ไข**:
+   > 1. **ปิดนโยบายระดับโปรเจกต์ (หากมีสิทธิ์ Admin):** ไปที่ GCP Console -> ค้นหา **Organization Policies** -> คลิกเข้าไปที่นโยบาย **Domain restricted sharing** -> กด **Manage policy** -> เลือก **Customize** -> เลือกการบังคับใช้ (**Enforcement**) เป็น **Off** จากนั้นกดบันทึก รอ 2 นาที แล้วมารันคำสั่งนี้อีกครั้ง:
+   >    ```powershell
+   >    gcloud run services add-iam-policy-binding gold-frame-generator --region=asia-southeast1 --member="allUsers" --role="roles/run.invoker"
+   >    ```
+   > 2. **ใช้ Firebase Hosting เป็นตัวกลางแทน (หากไม่มีสิทธิ์ Admin):** โดยการส่งคำขอผ่าน Firebase Hosting ไปเรียกใช้บริการ Cloud Run แบบ Private ภายในโปรเจกต์เดียวกันแทน (ดูวิธีการทำได้ที่หัวข้อ **วิธีที่ 2: การตั้งค่าผ่าน Firebase Hosting** ด้านล่าง)
 
    > [!NOTE]
    > **การจัดการข้อมูลรายชื่อ Whitelist**:
@@ -257,14 +268,25 @@ python scripts/test_datastore.py
 
 ---
 
-### วิธีที่ 2: การตั้งค่าผ่าน Firebase Hosting (แนะนำหากมีการใช้บริการ Firebase อื่นๆ อยู่แล้ว)
-เนื่องจากโปรเจกต์นี้มี Firebase Project อยู่แล้ว การใช้ Firebase Hosting เป็น Proxy ไปยัง Cloud Run เป็นอีกหนึ่งวิธีที่เร็ว มีประสิทธิภาพ และตั้งค่าง่ายมาก:
+### วิธีที่ 2: การตั้งค่าผ่าน Firebase Hosting (แนะนำสำหรับข้ามข้อจำกัด Organization Policy)
+
+เนื่องจากโปรเจกต์นี้มี Firebase Project อยู่แล้ว การใช้ Firebase Hosting เป็น Proxy ไปยัง Cloud Run เป็นอีกหนึ่งวิธีที่เร็ว มีประสิทธิภาพ ตั้งค่าง่ายมาก และ**เป็นทางออกที่ดีที่สุดหากบัญชีของคุณติดนโยบายองค์กร (Domain Restricted Sharing / `iam.allowedPolicyMemberDomains`)** ที่บล็อกการตั้งค่าสิทธิ์ `allUsers` (สาธารณะ) บน Cloud Run โดยตรง เพราะ Hosting สามารถเรียกใช้ Cloud Run แบบ Private ภายในโปรเจกต์เดียวกันได้โดยอัตโนมัติ
 
 1. ติดตั้ง Firebase CLI บนเครื่อง:
    ```bash
    npm install -g firebase-tools
    firebase login
    ```
+   > [!TIP]
+   > **การเปลี่ยนสลับอีเมล Firebase CLI**:  
+   > หากระบบแจ้งว่า `Already logged in as...` แต่เป็นบัญชีที่ผิดสิทธิ์ ให้ทำการ Logout บัญชีเดิมและล็อกอินบัญชีใหม่ดังนี้:
+   > ```bash
+   > firebase logout
+   > firebase login
+   > # หรือใช้คำสั่งบังคับล็อกอินใหม่
+   > firebase login --reauth
+   > ```
+
 2. เชื่อมโปรเจกต์ Firebase:
    ```bash
    firebase use --add
@@ -306,7 +328,32 @@ python scripts/test_datastore.py
    ```bash
    firebase deploy --only hosting
    ```
-5. เชื่อมต่อ Custom Domain ในหน้า **Firebase Console** -> **Hosting** -> กด **Add Custom Domain** และดำเนินการตามขั้นตอนการยืนยันความเป็นเจ้าของและชี้ DNS ที่ระบุไว้บนหน้าจอ
+5. อนุญาตให้ Firebase Hosting เรียกใช้บริการ Cloud Run แบบ Private:
+   เนื่องจาก Cloud Run ถูกตั้งค่าจำกัดสิทธิ์การเข้าถึง (Private) เพื่อหลีกเลี่ยงข้อจำกัดนโยบายองค์กร (Domain Restricted Sharing) เราจำเป็นต้องอนุญาตให้ Firebase Hosting เข้ามาเรียกใช้งานได้โดยรันคำสั่ง:
+   ```bash
+   gcloud run services add-iam-policy-binding gold-frame-generator \
+       --region=asia-southeast1 \
+       --member="serviceAccount:service-[PROJECT_NUMBER]@gcp-sa-firebase.iam.gserviceaccount.com" \
+       --role="roles/run.invoker"
+   ```
+   *(หมายเหตุ: ให้เปลี่ยน `[PROJECT_NUMBER]` เป็นหมายเลขโปรเจกต์ของ GCP ของคุณ โดยคุณสามารถรันคำสั่ง `gcloud projects describe ชื่อโปรเจกต์ --format="value(projectNumber)"` เพื่อดึงหมายเลขดังกล่าว)*
+
+6. **เชื่อมต่อ Custom Domain ใน Firebase Console**:
+   * ไปที่ [Firebase Console](https://console.firebase.google.com/) -> เลือกโปรเจกต์ของคุณ -> ไปที่หน้า **Hosting**
+   * ที่แถบ Custom domains ให้คลิกปุ่ม **Add Custom Domain**
+   * ป้อนชื่อโดเมนของคุณ เช่น `goldframe.yourdomain.com` (หรือโดเมนหลัก `yourdomain.com`) จากนั้นคลิก **Continue**
+   * **ขั้นตอนที่ 1: ยืนยันความเป็นเจ้าของโดเมน (Verify Domain Ownership)**
+     * ระบบ Firebase จะแสดงค่า **TXT Record** (เช่น host เป็น `@` หรือว่าง และค่า value เป็น `google-site-verification=...`)
+     * ให้คัดลอกค่านั้นแล้วนำไปเพิ่มเป็น **TXT Record** ที่แผงควบคุมโดเมนของคุณ (เช่น Cloudflare, GoDaddy, Namecheap) จากนั้นกลับมาคลิก **Verify** ใน Firebase Console
+   * **ขั้นตอนที่ 2: ชี้เป้าหมาย DNS (Configure DNS Records)**
+     * เมื่อยืนยันสิทธิ์สำเร็จ Firebase จะแสดงค่าไอพีปลายทาง **A Records** (โดยปกติจะมีไอพีของ Firebase Hosting ให้ 2 ค่า เช่น `199.36.158.100` และ `199.36.158.95`)
+     * ให้คุณเพิ่ม **A Record** จำนวน 2 รายการ ในแผงควบคุมโดเมนของคุณ:
+       * **รายการที่ 1**: Type: `A` | Name: `subdomain` (เช่น `goldframe` หรือใช้ `@` หากเป็นโดเมนหลัก) | Value: ไอพีตัวแรก
+       * **รายการที่ 2**: Type: `A` | Name: `subdomain` (เช่น `goldframe` หรือใช้ `@` หากเป็นโดเมนหลัก) | Value: ไอพีตัวที่สอง
+   * **ขั้นตอนที่ 3: รอระบบออกใบรับรอง SSL (SSL Provisioning)**
+     * หลังจากตั้งค่า DNS เรียบร้อย ระบบ Firebase Hosting จะตรวจสอบความถูกต้องและขอใบรับรองความปลอดภัย SSL (Let's Encrypt SSL Certificate) ให้คุณโดยอัตโนมัติ
+     * สถานะจะเปลี่ยนจาก *Pending* เป็น *Connected* ซึ่งปกติจะใช้เวลาเปิดใช้งานภายใน 15-60 นาที (แต่อาจใช้เวลานานสุดได้ถึง 24 ชั่วโมง ขึ้นอยู่กับการแพร่กระจาย DNS ทั่วโลก)
+
 
 ---
 
